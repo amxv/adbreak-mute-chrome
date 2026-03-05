@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Adbreak Mute</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>Adbreak Mute</h1>
+
+      <label class="toggle-row" for="enable-toggle">
+        <span>Enable extension</span>
+        <input id="enable-toggle" type="checkbox" />
+      </label>
+
+      <div class="actions">
+        <button id="mute-btn" type="button">Mute tab</button>
+        <button id="unmute-btn" type="button">Unmute tab</button>
+      </div>
+
+      <p id="status-line" class="status">Loading status...</p>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
