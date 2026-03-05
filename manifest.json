@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Adbreak Mute",
-  "description": "Mute and unmute the active tab during ad breaks.",
-  "version": "0.1.0",
-  "permissions": ["tabs", "storage"],
+  "description": "Automatically mute ad breaks by detecting logo disappearance in a monitored tab.",
+  "version": "0.2.0",
+  "permissions": ["tabs", "activeTab", "storage", "alarms", "offscreen"],
   "background": {
     "service_worker": "background.js"
   },
@@ -15,6 +15,7 @@
       "32": "icons/icon32.png"
     }
   },
+  "options_page": "options.html",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",

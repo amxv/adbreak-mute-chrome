@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Adbreak Mute Calibration</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="options">
+      <h1>Adbreak Mute Calibration</h1>
+      <p class="subtitle">
+        Capture a frame, draw a rectangle around the logo region, and save calibration.
+      </p>
+
+      <p id="target-line" class="target">Target tab: Not selected.</p>
+
+      <div class="button-row">
+        <button id="capture-btn" type="button">Capture frame</button>
+        <button id="save-calibration-btn" type="button" disabled>Save selected ROI</button>
+      </div>
+
+      <div class="canvas-shell">
+        <canvas id="frame-canvas" width="640" height="360"></canvas>
+      </div>
+      <p id="roi-line" class="helper">No ROI selected yet.</p>
+
+      <section class="settings">
+        <h2>Detection Settings</h2>
+
+        <label for="threshold-input">
+          Hamming threshold (0-64)
+          <input id="threshold-input" type="number" min="0" max="64" step="1" />
+        </label>
+
+        <label for="absent-input">
+          Consecutive absent samples before mute
+          <input id="absent-input" type="number" min="1" max="20" step="1" />
+        </label>
+
+        <label for="present-input">
+          Consecutive present samples before unmute
+          <input id="present-input" type="number" min="1" max="20" step="1" />
+        </label>
+
+        <button id="save-settings-btn" type="button">Save settings</button>
+      </section>
+
+      <p id="status-line" class="status">Ready.</p>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

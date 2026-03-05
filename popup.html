@@ -16,8 +16,15 @@
       </label>
 
       <div class="actions">
-        <button id="mute-btn" type="button">Mute tab</button>
-        <button id="unmute-btn" type="button">Unmute tab</button>
+        <button id="monitor-btn" type="button">Start monitoring current tab</button>
+        <button id="options-btn" type="button">Open calibration/options</button>
+      </div>
+
+      <div class="status-grid">
+        <p><span>Monitored:</span> <strong id="monitored-line">None</strong></p>
+        <p><span>Logo:</span> <strong id="logo-line">Unknown</strong></p>
+        <p><span>Muted:</span> <strong id="muted-line">Unknown</strong></p>
+        <p><span>Decision:</span> <strong id="decision-line">Idle</strong></p>
       </div>
 
       <p id="status-line" class="status">Loading status...</p>
