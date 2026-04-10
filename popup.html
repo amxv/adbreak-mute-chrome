@@ -8,23 +8,29 @@
   </head>
   <body>
     <main class="popup">
-      <h1>Adbreak Mute</h1>
+      <div class="topbar">
+        <h1>Adbreak Mute</h1>
+        <label class="toggle-row" for="enable-toggle">
+          <span>On</span>
+          <input id="enable-toggle" type="checkbox" />
+        </label>
+      </div>
 
-      <label class="toggle-row" for="enable-toggle">
-        <span>Enable extension</span>
-        <input id="enable-toggle" type="checkbox" />
-      </label>
+      <p class="intro">Capture the saved logos once, then monitor the current tab.</p>
 
       <div class="actions">
-        <button id="monitor-btn" type="button">Start monitoring current tab</button>
-        <button id="options-btn" type="button">Open calibration/options</button>
+        <button id="capture-ipl-btn" type="button">Capture IPL logo</button>
+        <button id="capture-team-btn" type="button">Capture home team logo</button>
+        <button id="monitor-btn" type="button">Start monitoring</button>
+        <button id="clear-btn" type="button" class="secondary">Clear saved logos</button>
       </div>
 
       <div class="status-grid">
-        <p><span>Monitored:</span> <strong id="monitored-line">None</strong></p>
-        <p><span>Logo:</span> <strong id="logo-line">Unknown</strong></p>
-        <p><span>Muted:</span> <strong id="muted-line">Unknown</strong></p>
-        <p><span>Decision:</span> <strong id="decision-line">Idle</strong></p>
+        <p><span>Saved logos</span><strong id="template-line">None saved</strong></p>
+        <p><span>Monitoring</span><strong id="monitored-line">Stopped</strong></p>
+        <p><span>Detected</span><strong id="match-line">Unknown</strong></p>
+        <p><span>Audio</span><strong id="muted-line">Unknown</strong></p>
+        <p><span>Decision</span><strong id="decision-line">Idle.</strong></p>
       </div>
 
       <p id="status-line" class="status">Loading status...</p>

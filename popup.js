@@ -3,14 +3,19 @@ const MESSAGE_TYPES = {
   SET_ENABLED: "SET_ENABLED",
   START_MONITORING_CURRENT_TAB: "START_MONITORING_CURRENT_TAB",
   STOP_MONITORING: "STOP_MONITORING",
-  OPEN_OPTIONS: "OPEN_OPTIONS",
+  CAPTURE_IPL_TEMPLATE: "CAPTURE_IPL_TEMPLATE",
+  CAPTURE_TEAM_TEMPLATE: "CAPTURE_TEAM_TEMPLATE",
+  CLEAR_TEMPLATES: "CLEAR_TEMPLATES",
 };
 
 const enableToggle = document.getElementById("enable-toggle");
+const captureIplButton = document.getElementById("capture-ipl-btn");
+const captureTeamButton = document.getElementById("capture-team-btn");
+const clearButton = document.getElementById("clear-btn");
 const monitorButton = document.getElementById("monitor-btn");
-const optionsButton = document.getElementById("options-btn");
+const templateLine = document.getElementById("template-line");
 const monitoredLine = document.getElementById("monitored-line");
-const logoLine = document.getElementById("logo-line");
+const matchLine = document.getElementById("match-line");
 const mutedLine = document.getElementById("muted-line");
 const decisionLine = document.getElementById("decision-line");
 const statusLine = document.getElementById("status-line");
@@ -20,19 +25,19 @@ let refreshInFlight = false;
 
 function setStatus(text, isError = false) {
   statusLine.textContent = text;
-  statusLine.style.color = isError ? "#b91c1c" : "#1f2937";
+  statusLine.style.color = isError ? "#8f2d1f" : "#1c2431";
 }
 
-function formatLogo(logoPresent) {
-  if (logoPresent === true) {
-    return "Present";
+function truncate(text, maxLength = 38) {
+  if (typeof text !== "string") {
+    return "";
   }
 
-  if (logoPresent === false) {
-    return "Absent";
+  if (text.length <= maxLength) {
+    return text;
   }
 
-  return "Unknown";
+  return `${text.slice(0, maxLength - 1)}…`;
 }
 
 function formatMuted(muted, mutedReason) {
@@ -47,16 +52,24 @@ function formatMuted(muted, mutedReason) {
   return "Unknown";
 }
 
-function truncate(text, maxLength = 34) {
-  if (typeof text !== "string") {
-    return "";
+function renderTemplateSummary(state) {
+  const labels = [];
+
+  if (state?.hasIplTemplate) {
+    labels.push("IPL");
   }
 
-  if (text.length <= maxLength) {
-    return text;
+  if (state?.hasTeamTemplate) {
+    labels.push("Team");
   }
 
-  return `${text.slice(0, maxLength - 1)}…`;
+  return labels.length ? labels.join(" + ") : "None saved";
+}
+
+function renderMatchSummary(state) {
+  const label = state?.matchLabel || "Unknown";
+  const score = Number.isFinite(state?.matchScore) ? ` ${state.matchScore.toFixed(2)}` : "";
+  return `${label}${score}`;
 }
 
 function renderState(state) {
@@ -64,41 +77,31 @@ function renderState(state) {
 
   const enabled = Boolean(state?.enabled);
   const hasCurrentTab = Number.isInteger(state?.currentTabId);
-  const monitoring = Boolean(state?.monitoring);
-  const currentTabMonitored = Boolean(state?.isCurrentTabMonitored);
+  const hasIplTemplate = Boolean(state?.hasIplTemplate);
+  const monitoringCurrentTab = Boolean(state?.monitoring && state?.isCurrentTabMonitored);
 
   enableToggle.checked = enabled;
-  monitorButton.disabled = !enabled || !hasCurrentTab;
-  optionsButton.disabled = !hasCurrentTab;
+  captureIplButton.disabled = !enabled || !hasCurrentTab;
+  captureTeamButton.disabled = !enabled || !hasCurrentTab;
+  clearButton.disabled = !enabled || (!state?.hasIplTemplate && !state?.hasTeamTemplate);
+  monitorButton.disabled = !enabled || !hasCurrentTab || !hasIplTemplate;
 
-  if (!enabled) {
-    monitorButton.textContent = "Enable extension to monitor";
-  } else if (monitoring && currentTabMonitored) {
-    monitorButton.textContent = "Stop monitoring current tab";
-  } else if (monitoring && state?.monitoredTabId) {
-    monitorButton.textContent = "Switch monitoring to current tab";
-  } else {
-    monitorButton.textContent = "Start monitoring current tab";
-  }
+  monitorButton.textContent = monitoringCurrentTab
+    ? "Stop monitoring"
+    : state?.monitoring
+      ? "Switch to this tab"
+      : "Start monitoring";
 
-  const monitoredTabLabel = state?.monitoredTabTitle
-    ? truncate(state.monitoredTabTitle)
-    : Number.isInteger(state?.monitoredTabId)
-      ? `Tab ${state.monitoredTabId}`
-      : "None";
-
-  monitoredLine.textContent = monitoring ? monitoredTabLabel : "Stopped";
-  logoLine.textContent = formatLogo(state?.logoPresent);
+  templateLine.textContent = renderTemplateSummary(state);
+  monitoredLine.textContent = state?.monitoring
+    ? truncate(state?.monitoredTabTitle || `Tab ${state?.monitoredTabId || ""}`, 30)
+    : "Stopped";
+  matchLine.textContent = renderMatchSummary(state);
   mutedLine.textContent = formatMuted(state?.muted, state?.mutedReason);
-  decisionLine.textContent = truncate(state?.lastDecision || "Idle", 42);
+  decisionLine.textContent = truncate(state?.lastDecision || "Idle.", 46);
 
   if (state?.lastError) {
     setStatus(state.lastError, true);
-    return;
-  }
-
-  if (!state?.calibrationReady) {
-    setStatus("Calibration missing. Open calibration/options and save an ROI + reference hash.");
     return;
   }
 
@@ -143,26 +146,50 @@ enableToggle.addEventListener("change", async () => {
   }
 });
 
-monitorButton.addEventListener("click", async () => {
-  try {
-    const shouldStop = Boolean(latestState?.monitoring && latestState?.isCurrentTabMonitored);
-    const type = shouldStop
-      ? MESSAGE_TYPES.STOP_MONITORING
-      : MESSAGE_TYPES.START_MONITORING_CURRENT_TAB;
+captureIplButton.addEventListener("click", async () => {
+  captureIplButton.disabled = true;
+  setStatus("Capturing IPL logo from the current tab...");
 
-    const response = await sendMessage(type);
+  try {
+    const response = await sendMessage(MESSAGE_TYPES.CAPTURE_IPL_TEMPLATE);
+    renderState(response.state);
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    captureIplButton.disabled = false;
+  }
+});
+
+captureTeamButton.addEventListener("click", async () => {
+  captureTeamButton.disabled = true;
+  setStatus("Capturing home team logo from the current tab...");
+
+  try {
+    const response = await sendMessage(MESSAGE_TYPES.CAPTURE_TEAM_TEMPLATE);
+    renderState(response.state);
+  } catch (error) {
+    setStatus(error.message, true);
+  } finally {
+    captureTeamButton.disabled = false;
+  }
+});
+
+clearButton.addEventListener("click", async () => {
+  try {
+    const response = await sendMessage(MESSAGE_TYPES.CLEAR_TEMPLATES);
     renderState(response.state);
   } catch (error) {
     setStatus(error.message, true);
   }
 });
 
-optionsButton.addEventListener("click", async () => {
+monitorButton.addEventListener("click", async () => {
   try {
-    await sendMessage(MESSAGE_TYPES.OPEN_OPTIONS, {
-      tabId: latestState?.currentTabId,
-      windowId: latestState?.currentWindowId,
-    });
+    const type = latestState?.monitoring && latestState?.isCurrentTabMonitored
+      ? MESSAGE_TYPES.STOP_MONITORING
+      : MESSAGE_TYPES.START_MONITORING_CURRENT_TAB;
+    const response = await sendMessage(type);
+    renderState(response.state);
   } catch (error) {
     setStatus(error.message, true);
   }

@@ -1,90 +1,42 @@
 const OFFSCREEN_MESSAGE_TYPES = {
-  PROCESS_FRAME: "OFFSCREEN_PROCESS_FRAME",
+  BUILD_TEMPLATE: "OFFSCREEN_BUILD_TEMPLATE",
+  MATCH_FRAME: "OFFSCREEN_MATCH_FRAME",
 };
 
-const NIBBLE_BIT_COUNT = [0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4];
+const SEARCH_REGION = {
+  x: 0.02,
+  y: 0.02,
+  w: 0.32,
+  h: 0.22,
+};
 
-function normalizeRoiPixels(roi, width, height) {
-  const x = Math.min(0.99, Math.max(0, Number(roi.x)));
-  const y = Math.min(0.99, Math.max(0, Number(roi.y)));
-  const w = Math.min(1 - x, Math.max(0.005, Number(roi.w)));
-  const h = Math.min(1 - y, Math.max(0.005, Number(roi.h)));
+const SEGMENT_DEFS = [
+  { name: "full", x: 0.02, y: 0.08, w: 0.72, h: 0.82 },
+  { name: "body", x: 0.12, y: 0.26, w: 0.55, h: 0.64 },
+  { name: "lower", x: 0.08, y: 0.44, w: 0.62, h: 0.46 },
+];
+
+const MATCH_THRESHOLD = 0.6;
+
+function normalizeRegionPixels(region, width, height) {
+  const x = Math.min(0.99, Math.max(0, Number(region.x)));
+  const y = Math.min(0.99, Math.max(0, Number(region.y)));
+  const w = Math.min(1 - x, Math.max(0.01, Number(region.w)));
+  const h = Math.min(1 - y, Math.max(0.01, Number(region.h)));
 
   const px = Math.max(0, Math.min(width - 1, Math.floor(x * width)));
   const py = Math.max(0, Math.min(height - 1, Math.floor(y * height)));
-  const pw = Math.max(2, Math.min(width - px, Math.ceil(w * width)));
-  const ph = Math.max(2, Math.min(height - py, Math.ceil(h * height)));
+  const pw = Math.max(8, Math.min(width - px, Math.ceil(w * width)));
+  const ph = Math.max(8, Math.min(height - py, Math.ceil(h * height)));
 
   return { x: px, y: py, w: pw, h: ph };
-}
-
-function computeDHashFromImageData(imageData) {
-  const { data, width, height } = imageData;
-
-  if (width !== 9 || height !== 8) {
-    throw new Error("dHash input size must be 9x8.");
-  }
-
-  const grayscale = new Array(width * height);
-
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      const offset = (y * width + x) * 4;
-      const r = data[offset];
-      const g = data[offset + 1];
-      const b = data[offset + 2];
-      grayscale[y * width + x] = 0.299 * r + 0.587 * g + 0.114 * b;
-    }
-  }
-
-  const bits = [];
-
-  for (let y = 0; y < 8; y += 1) {
-    for (let x = 0; x < 8; x += 1) {
-      const left = grayscale[y * 9 + x];
-      const right = grayscale[y * 9 + x + 1];
-      bits.push(left > right ? 1 : 0);
-    }
-  }
-
-  let hex = "";
-
-  for (let i = 0; i < bits.length; i += 4) {
-    const value = (bits[i] << 3) | (bits[i + 1] << 2) | (bits[i + 2] << 1) | bits[i + 3];
-    hex += value.toString(16);
-  }
-
-  return hex;
-}
-
-function hammingDistanceHex(hashA, hashB) {
-  if (hashA.length !== hashB.length) {
-    throw new Error("Cannot compare hashes of different lengths.");
-  }
-
-  let distance = 0;
-
-  for (let i = 0; i < hashA.length; i += 1) {
-    const nibbleA = parseInt(hashA[i], 16);
-    const nibbleB = parseInt(hashB[i], 16);
-    const xorValue = nibbleA ^ nibbleB;
-    distance += NIBBLE_BIT_COUNT[xorValue];
-  }
-
-  return distance;
 }
 
 function detectBlankFrame(imageData) {
   const { data } = imageData;
 
   if (!data.length) {
-    return {
-      isBlank: true,
-      meanLuma: 0,
-      stdDev: 0,
-      maxLuma: 0,
-      nearBlackRatio: 1,
-    };
+    return { isBlank: true };
   }
 
   let sum = 0;
@@ -96,11 +48,9 @@ function detectBlankFrame(imageData) {
     const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
     sum += luma;
     sumSq += luma * luma;
-
     if (luma > maxLuma) {
       maxLuma = luma;
     }
-
     if (luma < 12) {
       nearBlack += 1;
     }
@@ -112,14 +62,8 @@ function detectBlankFrame(imageData) {
   const stdDev = Math.sqrt(variance);
   const nearBlackRatio = nearBlack / pixelCount;
 
-  const isBlank = nearBlackRatio > 0.98 && maxLuma < 24 && stdDev < 6;
-
   return {
-    isBlank,
-    meanLuma,
-    stdDev,
-    maxLuma,
-    nearBlackRatio,
+    isBlank: nearBlackRatio > 0.98 && maxLuma < 24 && stdDev < 6,
   };
 }
 
@@ -131,22 +75,124 @@ async function loadImage(dataUrl) {
   const image = new Image();
   image.src = dataUrl;
   await image.decode();
-
   return image;
 }
 
-async function processFrame({ dataUrl, roi, referenceHash, threshold }) {
-  if (!roi || typeof roi !== "object") {
-    throw new Error("ROI is missing.");
+function createCanvas(width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  return canvas;
+}
+
+function toGrayscaleEdges(imageData) {
+  const { data, width, height } = imageData;
+  const gray = new Array(width * height).fill(0);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      gray[y * width + x] = 0.299 * data[offset] + 0.587 * data[offset + 1] + 0.114 * data[offset + 2];
+    }
   }
 
-  if (typeof referenceHash !== "string" || !/^[0-9a-f]{16}$/i.test(referenceHash)) {
-    throw new Error("Reference hash is invalid.");
+  const edges = new Array(width * height).fill(0);
+
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const left = gray[y * width + (x - 1)];
+      const right = gray[y * width + (x + 1)];
+      const up = gray[(y - 1) * width + x];
+      const down = gray[(y + 1) * width + x];
+      const dx = right - left;
+      const dy = down - up;
+      edges[y * width + x] = Math.min(255, Math.sqrt(dx * dx + dy * dy));
+    }
   }
 
-  const normalizedThreshold = Number.isFinite(Number(threshold))
-    ? Math.max(0, Math.min(64, Math.round(Number(threshold))))
-    : 10;
+  const max = edges.reduce((current, value) => Math.max(current, value), 0) || 1;
+  return edges.map((value) => Number((value / max).toFixed(4)));
+}
+
+function extractSegment(sourceCanvas, region, segmentDef, width = 32, height = 32) {
+  const segmentCanvas = createCanvas(width, height);
+  const segmentContext = segmentCanvas.getContext("2d", { willReadFrequently: true });
+
+  const sx = region.x + Math.floor(region.w * segmentDef.x);
+  const sy = region.y + Math.floor(region.h * segmentDef.y);
+  const sw = Math.max(4, Math.floor(region.w * segmentDef.w));
+  const sh = Math.max(4, Math.floor(region.h * segmentDef.h));
+
+  segmentContext.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, width, height);
+  return segmentContext.getImageData(0, 0, width, height);
+}
+
+function compareArrays(a, b) {
+  const length = Math.min(a.length, b.length);
+
+  if (!length) {
+    return 1;
+  }
+
+  let totalDiff = 0;
+  let totalEnergy = 0;
+
+  for (let index = 0; index < length; index += 1) {
+    totalDiff += Math.abs(a[index] - b[index]);
+    totalEnergy += Math.max(a[index], b[index]);
+  }
+
+  if (totalEnergy < 0.0001) {
+    return 1;
+  }
+
+  return 1 - totalDiff / totalEnergy;
+}
+
+function buildTemplateSegments(sourceCanvas, region) {
+  return SEGMENT_DEFS.map((segmentDef) => {
+    const imageData = extractSegment(sourceCanvas, region, segmentDef);
+    return {
+      name: segmentDef.name,
+      width: imageData.width,
+      height: imageData.height,
+      data: toGrayscaleEdges(imageData),
+    };
+  });
+}
+
+async function buildTemplate({ dataUrl, label }) {
+  const image = await loadImage(dataUrl);
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+
+  if (!width || !height) {
+    throw new Error("Captured frame has invalid dimensions.");
+  }
+
+  const sourceCanvas = createCanvas(width, height);
+  const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
+  sourceContext.drawImage(image, 0, 0, width, height);
+
+  const region = normalizeRegionPixels(SEARCH_REGION, width, height);
+  const regionImageData = sourceContext.getImageData(region.x, region.y, region.w, region.h);
+  const blank = detectBlankFrame(regionImageData);
+
+  if (blank.isBlank) {
+    throw new Error("The captured top-left region looks blank. Try again while the stream is visible.");
+  }
+
+  return {
+    label,
+    region: SEARCH_REGION,
+    segments: buildTemplateSegments(sourceCanvas, region),
+  };
+}
+
+async function matchFrame({ dataUrl, templates }) {
+  if (!Array.isArray(templates) || !templates.length) {
+    throw new Error("No templates provided.");
+  }
 
   const image = await loadImage(dataUrl);
   const width = image.naturalWidth || image.width;
@@ -156,60 +202,83 @@ async function processFrame({ dataUrl, roi, referenceHash, threshold }) {
     throw new Error("Captured frame has invalid dimensions.");
   }
 
-  const sourceCanvas = document.createElement("canvas");
-  sourceCanvas.width = width;
-  sourceCanvas.height = height;
+  const sourceCanvas = createCanvas(width, height);
   const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
-
   sourceContext.drawImage(image, 0, 0, width, height);
 
-  const roiPixels = normalizeRoiPixels(roi, width, height);
-  const roiImageData = sourceContext.getImageData(roiPixels.x, roiPixels.y, roiPixels.w, roiPixels.h);
-  const blankStats = detectBlankFrame(roiImageData);
+  const region = normalizeRegionPixels(SEARCH_REGION, width, height);
+  const regionImageData = sourceContext.getImageData(region.x, region.y, region.w, region.h);
+  const blank = detectBlankFrame(regionImageData);
 
-  const hashCanvas = document.createElement("canvas");
-  hashCanvas.width = 9;
-  hashCanvas.height = 8;
-  const hashContext = hashCanvas.getContext("2d", { willReadFrequently: true });
+  if (blank.isBlank) {
+    return {
+      isBlank: true,
+      logoPresent: false,
+      matchLabel: "Unknown",
+      matchScore: 0,
+    };
+  }
 
-  hashContext.drawImage(
-    sourceCanvas,
-    roiPixels.x,
-    roiPixels.y,
-    roiPixels.w,
-    roiPixels.h,
-    0,
-    0,
-    9,
-    8,
-  );
+  const currentSegments = buildTemplateSegments(sourceCanvas, region);
 
-  const hashImageData = hashContext.getImageData(0, 0, 9, 8);
-  const currentHash = computeDHashFromImageData(hashImageData);
-  const distance = hammingDistanceHex(currentHash, referenceHash.toLowerCase());
-  const logoPresent = distance <= normalizedThreshold;
+  let bestTemplate = null;
+  let bestScore = -Infinity;
+
+  for (const template of templates) {
+    let scoreSum = 0;
+    let count = 0;
+
+    for (const templateSegment of template.segments) {
+      const currentSegment = currentSegments.find((segment) => segment.name === templateSegment.name);
+
+      if (!currentSegment) {
+        continue;
+      }
+
+      scoreSum += compareArrays(currentSegment.data, templateSegment.data);
+      count += 1;
+    }
+
+    const score = count ? scoreSum / count : 0;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestTemplate = template;
+    }
+  }
 
   return {
-    hash: currentHash,
-    distance,
-    logoPresent,
-    isBlank: blankStats.isBlank,
-    blankStats,
+    isBlank: false,
+    logoPresent: bestScore >= MATCH_THRESHOLD,
+    matchLabel: bestTemplate?.label || "Unknown",
+    matchScore: bestScore,
   };
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type !== OFFSCREEN_MESSAGE_TYPES.PROCESS_FRAME) {
-    return false;
+  if (message?.type === OFFSCREEN_MESSAGE_TYPES.BUILD_TEMPLATE) {
+    buildTemplate(message)
+      .then((template) => {
+        sendResponse({ ok: true, template });
+      })
+      .catch((error) => {
+        sendResponse({ ok: false, error: error?.message || "Failed to build template." });
+      });
+
+    return true;
   }
 
-  processFrame(message)
-    .then((result) => {
-      sendResponse({ ok: true, ...result });
-    })
-    .catch((error) => {
-      sendResponse({ ok: false, error: error?.message || "Failed to process frame." });
-    });
+  if (message?.type === OFFSCREEN_MESSAGE_TYPES.MATCH_FRAME) {
+    matchFrame(message)
+      .then((result) => {
+        sendResponse({ ok: true, ...result });
+      })
+      .catch((error) => {
+        sendResponse({ ok: false, error: error?.message || "Failed to process frame." });
+      });
 
-  return true;
+    return true;
+  }
+
+  return false;
 });
