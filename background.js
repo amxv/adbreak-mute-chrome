@@ -10,7 +10,7 @@ const MESSAGE_TYPES = {
 
 const STORAGE_KEY = "appState";
 const MONITOR_ALARM = "monitor-sample";
-const SAMPLE_INTERVAL_MS = 1200;
+const SAMPLE_INTERVAL_MS = 700;
 const SEARCH_REGION = {
   x: 0.02,
   y: 0.02,
@@ -22,9 +22,10 @@ const SEGMENT_DEFS = [
   { name: "body", x: 0.12, y: 0.26, w: 0.55, h: 0.64 },
   { name: "lower", x: 0.08, y: 0.44, w: 0.62, h: 0.46 },
 ];
-const MATCH_THRESHOLD = 0.4;
+const MATCH_THRESHOLD = 0.52;
+const SOFT_MATCH_THRESHOLD = 0.4;
 const ABSENT_SAMPLES_TO_MUTE = 3;
-const PRESENT_SAMPLES_TO_UNMUTE = 2;
+const PRESENT_SAMPLES_TO_UNMUTE = 1;
 const DEBUG_MIRROR_URL = "http://127.0.0.1:38241/log";
 
 const DEFAULT_STATE = {
@@ -307,6 +308,59 @@ function toGrayscaleEdges(imageData) {
   return edges.map((value) => Number((value / max).toFixed(4)));
 }
 
+function rgbToHsl(r, g, b) {
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const lightness = (max + min) / 2;
+
+  if (max === min) {
+    return { saturation: 0, lightness };
+  }
+
+  const delta = max - min;
+  const saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+  return { saturation, lightness };
+}
+
+function computeSegmentStats(imageData) {
+  const { data } = imageData;
+  const pixelCount = data.length / 4 || 1;
+  let whitePixels = 0;
+  let colorPixels = 0;
+  let edgeSourcePixels = 0;
+
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const r = data[offset];
+    const g = data[offset + 1];
+    const b = data[offset + 2];
+    const maxChannel = Math.max(r, g, b);
+    const minChannel = Math.min(r, g, b);
+    const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+    const { saturation } = rgbToHsl(r, g, b);
+
+    if (luma > 170 && saturation < 0.25 && maxChannel - minChannel < 55) {
+      whitePixels += 1;
+    }
+
+    if (saturation > 0.28 && luma > 35 && luma < 220) {
+      colorPixels += 1;
+    }
+
+    if (luma > 145 || saturation > 0.25) {
+      edgeSourcePixels += 1;
+    }
+  }
+
+  return {
+    whiteRatio: Number((whitePixels / pixelCount).toFixed(4)),
+    colorRatio: Number((colorPixels / pixelCount).toFixed(4)),
+    edgeSourceRatio: Number((edgeSourcePixels / pixelCount).toFixed(4)),
+  };
+}
+
 function extractSegment(sourceCanvas, region, segmentDef, width = 32, height = 32) {
   const segmentCanvas = createCanvas(width, height);
   const segmentContext = segmentCanvas.getContext("2d", { willReadFrequently: true });
@@ -345,13 +399,28 @@ function compareArrays(a, b) {
 function buildTemplateSegments(sourceCanvas, region) {
   return SEGMENT_DEFS.map((segmentDef) => {
     const imageData = extractSegment(sourceCanvas, region, segmentDef);
+    const stats = computeSegmentStats(imageData);
     return {
       name: segmentDef.name,
       width: imageData.width,
       height: imageData.height,
       data: toGrayscaleEdges(imageData),
+      whiteRatio: stats.whiteRatio,
+      colorRatio: stats.colorRatio,
+      edgeSourceRatio: stats.edgeSourceRatio,
     };
   });
+}
+
+function summarizeTemplateProfile(segments) {
+  const whiteAverage = segments.reduce((sum, segment) => sum + segment.whiteRatio, 0) / segments.length;
+  const colorAverage = segments.reduce((sum, segment) => sum + segment.colorRatio, 0) / segments.length;
+
+  return {
+    dominantInk: whiteAverage >= colorAverage ? "white" : "color",
+    whiteAverage: Number(whiteAverage.toFixed(4)),
+    colorAverage: Number(colorAverage.toFixed(4)),
+  };
 }
 
 async function buildTemplateFromDataUrl({ dataUrl, label }) {
@@ -375,11 +444,23 @@ async function buildTemplateFromDataUrl({ dataUrl, label }) {
     throw new Error("The captured top-left region looks blank. Try again while the stream is visible.");
   }
 
+  const segments = buildTemplateSegments(sourceCanvas, region);
+
   return {
     label,
     region: SEARCH_REGION,
-    segments: buildTemplateSegments(sourceCanvas, region),
+    segments,
+    profile: summarizeTemplateProfile(segments),
   };
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
+}
+
+function scoreRatio(currentValue, templateValue) {
+  const baseline = Math.max(templateValue, 0.02);
+  return clamp01(1 - Math.abs(currentValue - templateValue) / baseline);
 }
 
 async function matchFrameAgainstTemplates({ dataUrl, templates }) {
@@ -415,10 +496,16 @@ async function matchFrameAgainstTemplates({ dataUrl, templates }) {
   const currentSegments = buildTemplateSegments(sourceCanvas, region);
   let bestTemplate = null;
   let bestScore = -Infinity;
+  let bestInkScore = 0;
+  let bestCurrentInk = 0;
+  let bestTemplateInk = 0;
 
   for (const template of templates) {
     let scoreSum = 0;
     let count = 0;
+    let currentInkAverage = 0;
+    let templateInkAverage = 0;
+    let inkScoreSum = 0;
 
     for (const templateSegment of template.segments) {
       const currentSegment = currentSegments.find((segment) => segment.name === templateSegment.name);
@@ -427,23 +514,50 @@ async function matchFrameAgainstTemplates({ dataUrl, templates }) {
         continue;
       }
 
-      scoreSum += compareArrays(currentSegment.data, templateSegment.data);
+      const edgeScore = compareArrays(currentSegment.data, templateSegment.data);
+      const useWhiteInk = (template.profile?.dominantInk || "white") === "white";
+      const currentInkRatio = useWhiteInk ? currentSegment.whiteRatio : currentSegment.colorRatio;
+      const templateInkRatio = useWhiteInk ? templateSegment.whiteRatio : templateSegment.colorRatio;
+      const inkScore = scoreRatio(currentInkRatio, templateInkRatio);
+      const edgeSourceScore = scoreRatio(currentSegment.edgeSourceRatio, templateSegment.edgeSourceRatio);
+      const segmentScore = inkScore * 0.6 + edgeScore * 0.25 + edgeSourceScore * 0.15;
+
+      scoreSum += segmentScore;
+      inkScoreSum += inkScore;
+      currentInkAverage += currentInkRatio;
+      templateInkAverage += templateInkRatio;
       count += 1;
     }
 
-    const score = count ? scoreSum / count : 0;
+    const rawScore = count ? scoreSum / count : 0;
+    const avgInkScore = count ? inkScoreSum / count : 0;
+    const avgCurrentInk = count ? currentInkAverage / count : 0;
+    const avgTemplateInk = count ? templateInkAverage / count : 0;
+    const inkPresenceFloor = avgTemplateInk > 0.03 ? avgTemplateInk * 0.35 : 0.015;
+    const score = avgCurrentInk < inkPresenceFloor ? rawScore * 0.35 : rawScore;
 
     if (score > bestScore) {
       bestScore = score;
       bestTemplate = template;
+      bestInkScore = avgInkScore;
+      bestCurrentInk = avgCurrentInk;
+      bestTemplateInk = avgTemplateInk;
     }
   }
 
+  const inkPresenceThreshold = Math.max(bestTemplateInk * 0.42, 0.018);
+  const likelyStaticLogoInk = bestCurrentInk >= inkPresenceThreshold && bestInkScore >= 0.58;
+  const logoPresent = bestScore >= MATCH_THRESHOLD || (bestScore >= SOFT_MATCH_THRESHOLD && likelyStaticLogoInk);
+
   return {
     isBlank: false,
-    logoPresent: bestScore >= MATCH_THRESHOLD,
+    logoPresent,
     matchLabel: bestTemplate?.label || "Unknown",
     matchScore: bestScore,
+    inkScore: bestInkScore,
+    currentInk: bestCurrentInk,
+    templateInk: bestTemplateInk,
+    likelyStaticLogoInk,
   };
 }
 
@@ -759,12 +873,18 @@ async function runMonitorTick() {
     const scoreText = Number.isFinite(state.runtime.matchScore)
       ? `match score ${state.runtime.matchScore.toFixed(3)}`
       : "match score unavailable";
+    const inkText =
+      Number.isFinite(matchResult.inkScore) &&
+      Number.isFinite(matchResult.currentInk) &&
+      Number.isFinite(matchResult.templateInk)
+        ? `ink ${matchResult.inkScore.toFixed(3)} (${matchResult.currentInk.toFixed(3)}/${matchResult.templateInk.toFixed(3)})`
+        : "ink unavailable";
     state.runtime.statusMessage = matchResult.logoPresent
-      ? `${matchResult.matchLabel} found in top-left region; ${scoreText}.`
-      : `No saved logo found in top-left region; ${scoreText}.`;
+      ? `${matchResult.matchLabel} found in top-left region; ${scoreText}; ${inkText}.`
+      : `No saved logo found in top-left region; ${scoreText}; ${inkText}.`;
     state = appendDebug(
       state,
-      `Monitor sample result: ${matchResult.logoPresent ? "match" : "no match"} (${matchResult.matchLabel}, ${scoreText}).`,
+      `Monitor sample result: ${matchResult.logoPresent ? "match" : "no match"} (${matchResult.matchLabel}, ${scoreText}, ${inkText}, static-ink ${matchResult.likelyStaticLogoInk ? "yes" : "no"}).`,
     );
 
     await setStoredState(state);
