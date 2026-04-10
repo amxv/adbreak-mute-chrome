@@ -138,3 +138,16 @@ button:disabled {
   line-height: 1.4;
   color: var(--ink);
 }
+
+.debug-log {
+  margin: 10px 0 0;
+  padding: 10px;
+  max-height: 170px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 250, 241, 0.88);
+  color: var(--muted);
+  font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+}

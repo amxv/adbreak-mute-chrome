@@ -4,6 +4,7 @@
   "description": "Automatically mute ad breaks by detecting logo disappearance in a monitored tab.",
   "version": "0.2.0",
   "permissions": ["tabs", "activeTab", "storage", "alarms", "offscreen"],
+  "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background.js"
   },

@@ -19,13 +19,24 @@ const matchLine = document.getElementById("match-line");
 const mutedLine = document.getElementById("muted-line");
 const decisionLine = document.getElementById("decision-line");
 const statusLine = document.getElementById("status-line");
+const debugLog = document.getElementById("debug-log");
 
 let latestState = null;
 let refreshInFlight = false;
+let transientStatus = null;
+let transientStatusIsError = false;
+let transientStatusUntil = 0;
 
 function setStatus(text, isError = false) {
   statusLine.textContent = text;
   statusLine.style.color = isError ? "#8f2d1f" : "#1c2431";
+}
+
+function setTransientStatus(text, isError = false, holdMs = 5000) {
+  transientStatus = text;
+  transientStatusIsError = isError;
+  transientStatusUntil = Date.now() + holdMs;
+  setStatus(text, isError);
 }
 
 function truncate(text, maxLength = 38) {
@@ -99,6 +110,17 @@ function renderState(state) {
   matchLine.textContent = renderMatchSummary(state);
   mutedLine.textContent = formatMuted(state?.muted, state?.mutedReason);
   decisionLine.textContent = truncate(state?.lastDecision || "Idle.", 46);
+  debugLog.textContent = Array.isArray(state?.debugLog) && state.debugLog.length
+    ? state.debugLog.join("\n")
+    : "No debug events yet.";
+
+  if (transientStatus && Date.now() < transientStatusUntil) {
+    setStatus(transientStatus, transientStatusIsError);
+    return;
+  }
+
+  transientStatus = null;
+  transientStatusUntil = 0;
 
   if (state?.lastError) {
     setStatus(state.lastError, true);
@@ -129,7 +151,7 @@ async function refreshState() {
     const response = await sendMessage(MESSAGE_TYPES.GET_STATE);
     renderState(response.state);
   } catch (error) {
-    setStatus(error.message, true);
+    setTransientStatus(error.message, true);
   } finally {
     refreshInFlight = false;
   }
@@ -142,19 +164,19 @@ enableToggle.addEventListener("change", async () => {
     });
     renderState(response.state);
   } catch (error) {
-    setStatus(error.message, true);
+    setTransientStatus(error.message, true);
   }
 });
 
 captureIplButton.addEventListener("click", async () => {
   captureIplButton.disabled = true;
-  setStatus("Capturing IPL logo from the current tab...");
+  setTransientStatus("Capturing IPL logo from the current tab...", false, 3000);
 
   try {
     const response = await sendMessage(MESSAGE_TYPES.CAPTURE_IPL_TEMPLATE);
     renderState(response.state);
   } catch (error) {
-    setStatus(error.message, true);
+    setTransientStatus(error.message, true, 8000);
   } finally {
     captureIplButton.disabled = false;
   }
@@ -162,13 +184,13 @@ captureIplButton.addEventListener("click", async () => {
 
 captureTeamButton.addEventListener("click", async () => {
   captureTeamButton.disabled = true;
-  setStatus("Capturing home team logo from the current tab...");
+  setTransientStatus("Capturing home team logo from the current tab...", false, 3000);
 
   try {
     const response = await sendMessage(MESSAGE_TYPES.CAPTURE_TEAM_TEMPLATE);
     renderState(response.state);
   } catch (error) {
-    setStatus(error.message, true);
+    setTransientStatus(error.message, true, 8000);
   } finally {
     captureTeamButton.disabled = false;
   }
@@ -179,7 +201,7 @@ clearButton.addEventListener("click", async () => {
     const response = await sendMessage(MESSAGE_TYPES.CLEAR_TEMPLATES);
     renderState(response.state);
   } catch (error) {
-    setStatus(error.message, true);
+    setTransientStatus(error.message, true);
   }
 });
 
@@ -191,7 +213,7 @@ monitorButton.addEventListener("click", async () => {
     const response = await sendMessage(type);
     renderState(response.state);
   } catch (error) {
-    setStatus(error.message, true);
+    setTransientStatus(error.message, true);
   }
 });
 

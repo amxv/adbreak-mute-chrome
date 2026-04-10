@@ -8,14 +8,24 @@ const MESSAGE_TYPES = {
   CLEAR_TEMPLATES: "CLEAR_TEMPLATES",
 };
 
-const OFFSCREEN_MESSAGE_TYPES = {
-  BUILD_TEMPLATE: "OFFSCREEN_BUILD_TEMPLATE",
-  MATCH_FRAME: "OFFSCREEN_MATCH_FRAME",
-};
-
 const STORAGE_KEY = "appState";
 const MONITOR_ALARM = "monitor-sample";
 const SAMPLE_INTERVAL_MS = 1200;
+const SEARCH_REGION = {
+  x: 0.02,
+  y: 0.02,
+  w: 0.32,
+  h: 0.22,
+};
+const SEGMENT_DEFS = [
+  { name: "full", x: 0.02, y: 0.08, w: 0.72, h: 0.82 },
+  { name: "body", x: 0.12, y: 0.26, w: 0.55, h: 0.64 },
+  { name: "lower", x: 0.08, y: 0.44, w: 0.62, h: 0.46 },
+];
+const MATCH_THRESHOLD = 0.4;
+const ABSENT_SAMPLES_TO_MUTE = 3;
+const PRESENT_SAMPLES_TO_UNMUTE = 2;
+const DEBUG_MIRROR_URL = "http://127.0.0.1:38241/log";
 
 const DEFAULT_STATE = {
   enabled: true,
@@ -32,6 +42,9 @@ const DEFAULT_STATE = {
     lastDecision: "Idle.",
     statusMessage: "Capture the IPL logo, optionally capture the home team logo, then start monitoring.",
     lastError: null,
+    debugLog: [],
+    consecutivePresent: 0,
+    consecutiveAbsent: 0,
     autoMuted: false,
     muted: null,
     mutedReason: null,
@@ -69,6 +82,15 @@ function withDefaults(state = {}) {
           : DEFAULT_STATE.runtime.statusMessage,
       lastError:
         typeof runtime.lastError === "string" ? runtime.lastError : DEFAULT_STATE.runtime.lastError,
+      debugLog: Array.isArray(runtime.debugLog)
+        ? runtime.debugLog.filter((entry) => typeof entry === "string").slice(0, 12)
+        : DEFAULT_STATE.runtime.debugLog,
+      consecutivePresent: Number.isInteger(runtime.consecutivePresent) && runtime.consecutivePresent >= 0
+        ? runtime.consecutivePresent
+        : 0,
+      consecutiveAbsent: Number.isInteger(runtime.consecutiveAbsent) && runtime.consecutiveAbsent >= 0
+        ? runtime.consecutiveAbsent
+        : 0,
       autoMuted: Boolean(runtime.autoMuted),
       muted: typeof runtime.muted === "boolean" ? runtime.muted : DEFAULT_STATE.runtime.muted,
       mutedReason:
@@ -135,13 +157,46 @@ async function getTabSafe(tabId) {
 }
 
 async function getActiveTabCurrentWindow() {
-  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-  return tabs[0] || null;
+  const lastFocusedTabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+
+  if (lastFocusedTabs[0]) {
+    return lastFocusedTabs[0];
+  }
+
+  const currentWindowTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+  return currentWindowTabs[0] || null;
 }
 
 function buildCaptureFailureMessage(error) {
   const reason = error?.message || "Unknown capture error.";
   return `Frame capture failed (${reason}). Some streams block screenshots or return blank frames.`;
+}
+
+function appendDebug(state, message) {
+  const next = withDefaults(state);
+  const stamp = new Date().toLocaleTimeString("en-US", {
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const line = `${stamp} ${message}`;
+  next.runtime.debugLog = [line, ...next.runtime.debugLog].slice(0, 12);
+  mirrorDebugLine(line);
+  return next;
+}
+
+function mirrorDebugLine(line) {
+  fetch(DEBUG_MIRROR_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ts: Date.now(),
+      line,
+    }),
+  }).catch(() => {
+    // Local debug mirror is optional; keep extension behavior unaffected if unavailable.
+  });
 }
 
 async function clearMonitorAlarm() {
@@ -160,54 +215,236 @@ function delay(ms) {
   });
 }
 
-async function hasOffscreenDocument() {
-  if (typeof chrome.runtime.getContexts !== "function") {
-    return false;
+function normalizeRegionPixels(region, width, height) {
+  const x = Math.min(0.99, Math.max(0, Number(region.x)));
+  const y = Math.min(0.99, Math.max(0, Number(region.y)));
+  const w = Math.min(1 - x, Math.max(0.01, Number(region.w)));
+  const h = Math.min(1 - y, Math.max(0.01, Number(region.h)));
+
+  const px = Math.max(0, Math.min(width - 1, Math.floor(x * width)));
+  const py = Math.max(0, Math.min(height - 1, Math.floor(y * height)));
+  const pw = Math.max(8, Math.min(width - px, Math.ceil(w * width)));
+  const ph = Math.max(8, Math.min(height - py, Math.ceil(h * height)));
+
+  return { x: px, y: py, w: pw, h: ph };
+}
+
+function detectBlankFrame(imageData) {
+  const { data } = imageData;
+
+  if (!data.length) {
+    return { isBlank: true };
   }
 
-  const contexts = await chrome.runtime.getContexts({
-    contextTypes: ["OFFSCREEN_DOCUMENT"],
-    documentUrls: [chrome.runtime.getURL("offscreen.html")],
+  let sum = 0;
+  let sumSq = 0;
+  let maxLuma = 0;
+  let nearBlack = 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    const luma = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    sum += luma;
+    sumSq += luma * luma;
+    if (luma > maxLuma) {
+      maxLuma = luma;
+    }
+    if (luma < 12) {
+      nearBlack += 1;
+    }
+  }
+
+  const pixelCount = data.length / 4;
+  const meanLuma = sum / pixelCount;
+  const variance = Math.max(0, sumSq / pixelCount - meanLuma * meanLuma);
+  const stdDev = Math.sqrt(variance);
+  const nearBlackRatio = nearBlack / pixelCount;
+
+  return {
+    isBlank: nearBlackRatio > 0.98 && maxLuma < 24 && stdDev < 6,
+  };
+}
+
+async function loadImageBitmapFromDataUrl(dataUrl) {
+  if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image")) {
+    throw new Error("Invalid image payload.");
+  }
+
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return createImageBitmap(blob);
+}
+
+function createCanvas(width, height) {
+  return new OffscreenCanvas(width, height);
+}
+
+function toGrayscaleEdges(imageData) {
+  const { data, width, height } = imageData;
+  const gray = new Array(width * height).fill(0);
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      gray[y * width + x] = 0.299 * data[offset] + 0.587 * data[offset + 1] + 0.114 * data[offset + 2];
+    }
+  }
+
+  const edges = new Array(width * height).fill(0);
+
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const left = gray[y * width + (x - 1)];
+      const right = gray[y * width + (x + 1)];
+      const up = gray[(y - 1) * width + x];
+      const down = gray[(y + 1) * width + x];
+      const dx = right - left;
+      const dy = down - up;
+      edges[y * width + x] = Math.min(255, Math.sqrt(dx * dx + dy * dy));
+    }
+  }
+
+  const max = edges.reduce((current, value) => Math.max(current, value), 0) || 1;
+  return edges.map((value) => Number((value / max).toFixed(4)));
+}
+
+function extractSegment(sourceCanvas, region, segmentDef, width = 32, height = 32) {
+  const segmentCanvas = createCanvas(width, height);
+  const segmentContext = segmentCanvas.getContext("2d", { willReadFrequently: true });
+
+  const sx = region.x + Math.floor(region.w * segmentDef.x);
+  const sy = region.y + Math.floor(region.h * segmentDef.y);
+  const sw = Math.max(4, Math.floor(region.w * segmentDef.w));
+  const sh = Math.max(4, Math.floor(region.h * segmentDef.h));
+
+  segmentContext.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, width, height);
+  return segmentContext.getImageData(0, 0, width, height);
+}
+
+function compareArrays(a, b) {
+  const length = Math.min(a.length, b.length);
+
+  if (!length) {
+    return 1;
+  }
+
+  let totalDiff = 0;
+  let totalEnergy = 0;
+
+  for (let index = 0; index < length; index += 1) {
+    totalDiff += Math.abs(a[index] - b[index]);
+    totalEnergy += Math.max(a[index], b[index]);
+  }
+
+  if (totalEnergy < 0.0001) {
+    return 1;
+  }
+
+  return 1 - totalDiff / totalEnergy;
+}
+
+function buildTemplateSegments(sourceCanvas, region) {
+  return SEGMENT_DEFS.map((segmentDef) => {
+    const imageData = extractSegment(sourceCanvas, region, segmentDef);
+    return {
+      name: segmentDef.name,
+      width: imageData.width,
+      height: imageData.height,
+      data: toGrayscaleEdges(imageData),
+    };
   });
-
-  return contexts.length > 0;
 }
 
-async function ensureOffscreenDocument() {
-  if (await hasOffscreenDocument()) {
-    return;
+async function buildTemplateFromDataUrl({ dataUrl, label }) {
+  const image = await loadImageBitmapFromDataUrl(dataUrl);
+  const width = image.width;
+  const height = image.height;
+
+  if (!width || !height) {
+    throw new Error("Captured frame has invalid dimensions.");
   }
 
-  if (!offscreenCreationPromise) {
-    offscreenCreationPromise = chrome.offscreen
-      .createDocument({
-        url: "offscreen.html",
-        reasons: ["BLOBS"],
-        justification: "Process screenshots in canvas outside the service worker.",
-      })
-      .catch((error) => {
-        if (!String(error?.message || "").includes("single offscreen")) {
-          throw error;
-        }
-      })
-      .finally(() => {
-        offscreenCreationPromise = null;
-      });
+  const sourceCanvas = createCanvas(width, height);
+  const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
+  sourceContext.drawImage(image, 0, 0, width, height);
+
+  const region = normalizeRegionPixels(SEARCH_REGION, width, height);
+  const regionImageData = sourceContext.getImageData(region.x, region.y, region.w, region.h);
+  const blank = detectBlankFrame(regionImageData);
+
+  if (blank.isBlank) {
+    throw new Error("The captured top-left region looks blank. Try again while the stream is visible.");
   }
 
-  await offscreenCreationPromise;
+  return {
+    label,
+    region: SEARCH_REGION,
+    segments: buildTemplateSegments(sourceCanvas, region),
+  };
 }
 
-async function sendOffscreenMessage(message) {
-  await ensureOffscreenDocument();
-
-  const response = await chrome.runtime.sendMessage(message);
-
-  if (!response?.ok) {
-    throw new Error(response?.error || "Offscreen processing failed.");
+async function matchFrameAgainstTemplates({ dataUrl, templates }) {
+  if (!Array.isArray(templates) || !templates.length) {
+    throw new Error("No templates provided.");
   }
 
-  return response;
+  const image = await loadImageBitmapFromDataUrl(dataUrl);
+  const width = image.width;
+  const height = image.height;
+
+  if (!width || !height) {
+    throw new Error("Captured frame has invalid dimensions.");
+  }
+
+  const sourceCanvas = createCanvas(width, height);
+  const sourceContext = sourceCanvas.getContext("2d", { willReadFrequently: true });
+  sourceContext.drawImage(image, 0, 0, width, height);
+
+  const region = normalizeRegionPixels(SEARCH_REGION, width, height);
+  const regionImageData = sourceContext.getImageData(region.x, region.y, region.w, region.h);
+  const blank = detectBlankFrame(regionImageData);
+
+  if (blank.isBlank) {
+    return {
+      isBlank: true,
+      logoPresent: false,
+      matchLabel: "Unknown",
+      matchScore: 0,
+    };
+  }
+
+  const currentSegments = buildTemplateSegments(sourceCanvas, region);
+  let bestTemplate = null;
+  let bestScore = -Infinity;
+
+  for (const template of templates) {
+    let scoreSum = 0;
+    let count = 0;
+
+    for (const templateSegment of template.segments) {
+      const currentSegment = currentSegments.find((segment) => segment.name === templateSegment.name);
+
+      if (!currentSegment) {
+        continue;
+      }
+
+      scoreSum += compareArrays(currentSegment.data, templateSegment.data);
+      count += 1;
+    }
+
+    const score = count ? scoreSum / count : 0;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestTemplate = template;
+    }
+  }
+
+  return {
+    isBlank: false,
+    logoPresent: bestScore >= MATCH_THRESHOLD,
+    matchLabel: bestTemplate?.label || "Unknown",
+    matchScore: bestScore,
+  };
 }
 
 async function stopMonitoring(state, reason) {
@@ -233,6 +470,8 @@ async function stopMonitoring(state, reason) {
   next.runtime.autoMuted = false;
   next.runtime.matchLabel = "Unknown";
   next.runtime.matchScore = null;
+  next.runtime.consecutivePresent = 0;
+  next.runtime.consecutiveAbsent = 0;
   next.runtime.lastDecision = reason;
   next.runtime.statusMessage = reason;
 
@@ -266,6 +505,9 @@ async function buildPopupState(preloadedState = null) {
     mutedReason: monitoredTab?.mutedInfo?.reason ?? state.runtime.mutedReason,
     autoMuted: state.runtime.autoMuted,
     lastCaptureAt: state.runtime.lastCaptureAt,
+    debugLog: state.runtime.debugLog,
+    consecutivePresent: state.runtime.consecutivePresent,
+    consecutiveAbsent: state.runtime.consecutiveAbsent,
   };
 }
 
@@ -322,14 +564,47 @@ async function captureTemplate(kind) {
     throw new Error("No active tab found in the current window.");
   }
 
-  const capture = await captureVisibleFromTab(activeTab);
-  const template = await sendOffscreenMessage({
-    type: OFFSCREEN_MESSAGE_TYPES.BUILD_TEMPLATE,
-    dataUrl: capture.dataUrl,
-    label: kind === "ipl" ? "IPL logo" : "Home team logo",
-  });
-
   let state = await getStoredState();
+  state = appendDebug(
+    state,
+    `Capture requested for ${kind === "ipl" ? "IPL" : "team"} logo from tab ${activeTab.id} (${activeTab.title || "untitled"}).`,
+  );
+  await setStoredState(state);
+
+  const capture = await captureVisibleFromTab(activeTab);
+  state = await getStoredState();
+  state = appendDebug(
+    state,
+    `Screenshot captured from tab ${capture.tabId} in window ${capture.windowId}.`,
+  );
+  await setStoredState(state);
+
+  state = appendDebug(
+    state,
+    `Sending screenshot to offscreen processor for ${kind === "ipl" ? "IPL" : "team"} template build.`,
+  );
+  await setStoredState(state);
+
+  let template;
+
+  try {
+    template = {
+      template: await buildTemplateFromDataUrl({
+        dataUrl: capture.dataUrl,
+        label: kind === "ipl" ? "IPL logo" : "Home team logo",
+      }),
+    };
+  } catch (error) {
+    state = await getStoredState();
+      state.runtime.lastError = error?.message || "Offscreen template build failed.";
+      state.runtime.statusMessage = state.runtime.lastError;
+      state.runtime.lastDecision = "Capture failed before template save.";
+    state = appendDebug(state, `Template build failed: ${state.runtime.lastError}`);
+    await setStoredState(state);
+    throw error;
+  }
+
+  state = await getStoredState();
   state.monitoredTabId = capture.tabId;
   state.monitoredWindowId = capture.windowId;
   state.templates[kind] = template.template;
@@ -338,6 +613,10 @@ async function captureTemplate(kind) {
   state.runtime.statusMessage = `${template.template.label} saved. ${
     state.templates.ipl ? "You can start monitoring." : "Capture the IPL logo first."
   }`;
+  state = appendDebug(
+    state,
+    `${template.template.label} saved with ${template.template.segments.length} matching segments.`,
+  );
   state = await setStoredState(state);
 
   return {
@@ -376,6 +655,7 @@ async function runMonitorTick() {
 
     if (!state.templates.ipl) {
       state = await stopMonitoring(state, "Capture the IPL logo before monitoring.");
+      state = appendDebug(state, "Monitoring blocked because no IPL template is saved.");
       await setStoredState(state);
       return;
     }
@@ -389,6 +669,9 @@ async function runMonitorTick() {
       state.runtime.lastError = message;
       state.runtime.statusMessage = message;
       state.runtime.lastDecision = "Capture failed; mute state unchanged.";
+      state.runtime.consecutivePresent = 0;
+      state.runtime.consecutiveAbsent = 0;
+      state = appendDebug(state, message);
       await setStoredState(state);
       await scheduleNextMonitorTick();
       return;
@@ -399,8 +682,9 @@ async function runMonitorTick() {
     let matchResult;
 
     try {
-      matchResult = await sendOffscreenMessage({
-        type: OFFSCREEN_MESSAGE_TYPES.MATCH_FRAME,
+      state = appendDebug(state, "Processing monitor sample in service worker matcher.");
+      await setStoredState(state);
+      matchResult = await matchFrameAgainstTemplates({
         dataUrl,
         templates,
       });
@@ -409,6 +693,9 @@ async function runMonitorTick() {
       state.runtime.lastError = message;
       state.runtime.statusMessage = message;
       state.runtime.lastDecision = "Frame processing failed; mute state unchanged.";
+      state.runtime.consecutivePresent = 0;
+      state.runtime.consecutiveAbsent = 0;
+      state = appendDebug(state, message);
       await setStoredState(state);
       await scheduleNextMonitorTick();
       return;
@@ -423,6 +710,9 @@ async function runMonitorTick() {
       state.runtime.lastError = message;
       state.runtime.statusMessage = message;
       state.runtime.lastDecision = "Blank frame detected; mute state unchanged.";
+      state.runtime.consecutivePresent = 0;
+      state.runtime.consecutiveAbsent = 0;
+      state = appendDebug(state, message);
       await setStoredState(state);
       await scheduleNextMonitorTick();
       return;
@@ -431,27 +721,39 @@ async function runMonitorTick() {
     state.runtime.lastError = null;
 
     if (matchResult.logoPresent) {
-      if (state.runtime.autoMuted && state.runtime.muted && state.runtime.mutedReason === "extension") {
+      state.runtime.consecutivePresent += 1;
+      state.runtime.consecutiveAbsent = 0;
+
+      if (
+        state.runtime.consecutivePresent >= PRESENT_SAMPLES_TO_UNMUTE &&
+        state.runtime.autoMuted &&
+        state.runtime.muted &&
+        state.runtime.mutedReason === "extension"
+      ) {
         const updated = await chrome.tabs.update(monitoredTab.id, { muted: false });
         state.runtime.autoMuted = false;
         state.runtime.muted = Boolean(updated.mutedInfo?.muted);
         state.runtime.mutedReason = updated.mutedInfo?.reason ?? null;
-        state.runtime.lastDecision = `${matchResult.matchLabel} detected; tab auto-unmuted.`;
+        state.runtime.lastDecision = `${matchResult.matchLabel} detected consistently; tab auto-unmuted.`;
       } else {
-        state.runtime.autoMuted = false;
-        state.runtime.lastDecision = `${matchResult.matchLabel} detected; tab kept unmuted.`;
+        state.runtime.lastDecision = `${matchResult.matchLabel} detected (${state.runtime.consecutivePresent}/${PRESENT_SAMPLES_TO_UNMUTE}); tab kept unmuted.`;
       }
-    } else if (!state.runtime.muted) {
-      const updated = await chrome.tabs.update(monitoredTab.id, { muted: true });
-      state.runtime.autoMuted = true;
-      state.runtime.muted = Boolean(updated.mutedInfo?.muted);
-      state.runtime.mutedReason = updated.mutedInfo?.reason ?? null;
-      state.runtime.lastDecision = "No saved logo detected; tab auto-muted.";
-    } else if (state.runtime.mutedReason === "user") {
-      state.runtime.autoMuted = false;
-      state.runtime.lastDecision = "No saved logo detected; tab already muted by user.";
     } else {
-      state.runtime.lastDecision = "No saved logo detected; tab remains muted.";
+      state.runtime.consecutiveAbsent += 1;
+      state.runtime.consecutivePresent = 0;
+
+      if (state.runtime.consecutiveAbsent >= ABSENT_SAMPLES_TO_MUTE && !state.runtime.muted) {
+        const updated = await chrome.tabs.update(monitoredTab.id, { muted: true });
+        state.runtime.autoMuted = true;
+        state.runtime.muted = Boolean(updated.mutedInfo?.muted);
+        state.runtime.mutedReason = updated.mutedInfo?.reason ?? null;
+        state.runtime.lastDecision = "No saved logo detected consistently; tab auto-muted.";
+      } else if (state.runtime.mutedReason === "user") {
+        state.runtime.autoMuted = false;
+        state.runtime.lastDecision = "No saved logo detected; tab already muted by user.";
+      } else {
+        state.runtime.lastDecision = `No saved logo detected (${state.runtime.consecutiveAbsent}/${ABSENT_SAMPLES_TO_MUTE}); mute unchanged.`;
+      }
     }
 
     const scoreText = Number.isFinite(state.runtime.matchScore)
@@ -460,6 +762,10 @@ async function runMonitorTick() {
     state.runtime.statusMessage = matchResult.logoPresent
       ? `${matchResult.matchLabel} found in top-left region; ${scoreText}.`
       : `No saved logo found in top-left region; ${scoreText}.`;
+    state = appendDebug(
+      state,
+      `Monitor sample result: ${matchResult.logoPresent ? "match" : "no match"} (${matchResult.matchLabel}, ${scoreText}).`,
+    );
 
     await setStoredState(state);
 
@@ -491,6 +797,7 @@ async function handleMessage(message) {
         state.runtime.statusMessage = "Capture the IPL logo, then start monitoring.";
       }
 
+      state = appendDebug(state, `Extension ${state.enabled ? "enabled" : "disabled"}.`);
       state = await setStoredState(state);
       return { state: await buildPopupState(state) };
     }
@@ -507,8 +814,11 @@ async function handleMessage(message) {
       state.runtime.lastError = null;
       state.runtime.matchLabel = "Unknown";
       state.runtime.matchScore = null;
+      state.runtime.consecutivePresent = 0;
+      state.runtime.consecutiveAbsent = 0;
       state.runtime.lastDecision = "Saved logos cleared.";
       state.runtime.statusMessage = "Capture the IPL logo again before monitoring.";
+      state = appendDebug(state, "Saved templates cleared.");
 
       if (state.monitoring) {
         state = await stopMonitoring(state, "Monitoring stopped because saved logos were cleared.");
@@ -541,12 +851,18 @@ async function handleMessage(message) {
       state.runtime.lastError = null;
       state.runtime.matchLabel = "Unknown";
       state.runtime.matchScore = null;
+      state.runtime.consecutivePresent = 0;
+      state.runtime.consecutiveAbsent = 0;
       state.runtime.lastDecision = "Monitoring started for current tab.";
       state.runtime.statusMessage = "Monitoring active. Waiting for the next sample.";
       state.runtime.autoMuted = false;
       state.runtime.muted = Boolean(tab.mutedInfo?.muted);
       state.runtime.mutedReason = tab.mutedInfo?.reason ?? null;
       state.runtime.lastCaptureAt = null;
+      state = appendDebug(
+        state,
+        `Monitoring started on tab ${tab.id} (${tab.title || "untitled"}).`,
+      );
 
       await clearMonitorAlarm();
       state = await setStoredState(state);
@@ -558,6 +874,7 @@ async function handleMessage(message) {
     case MESSAGE_TYPES.STOP_MONITORING: {
       let state = await getStoredState();
       state = await stopMonitoring(state, "Monitoring stopped by user.");
+      state = appendDebug(state, "Monitoring stopped by user.");
       state = await setStoredState(state);
       return { state: await buildPopupState(state) };
     }
@@ -598,10 +915,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   }
 
   runMonitorTick().catch(async (error) => {
-    const state = await getStoredState();
+    let state = await getStoredState();
     state.runtime.lastError = `Monitoring failure: ${error?.message || "Unknown error."}`;
     state.runtime.statusMessage = state.runtime.lastError;
     state.runtime.lastDecision = "Monitoring encountered an error.";
+    state = appendDebug(state, state.runtime.lastError);
     await setStoredState(state);
     if (state.enabled && state.monitoring) {
       await scheduleNextMonitorTick();

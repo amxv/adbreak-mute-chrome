@@ -1,0 +1,270 @@
+
+=== log server started 2026-04-10T17:45:17.561Z ===
+listening on http://127.0.0.1:38241
+23:15:35 Capture requested for IPL logo from tab 1501763719 (RR vs RCB Live video streaming | TATA IPL 2026).
+23:15:36 Screenshot captured from tab 1501763719 in window 1501763709.
+23:15:36 Sending screenshot to offscreen processor for IPL template build.
+23:15:36 IPL logo saved with 3 matching segments.
+23:15:41 Monitoring started on tab 1501763719 (RR vs RCB Live video streaming | TATA IPL 2026).
+23:15:41 Processing monitor sample in service worker matcher.
+23:15:41 Monitor sample result: no match (IPL logo, match score 0.520).
+23:15:43 Processing monitor sample in service worker matcher.
+23:15:43 Monitor sample result: no match (IPL logo, match score 0.506).
+23:15:44 Processing monitor sample in service worker matcher.
+23:15:44 Monitor sample result: no match (IPL logo, match score 0.486).
+23:15:46 Processing monitor sample in service worker matcher.
+23:15:46 Monitor sample result: no match (IPL logo, match score 0.501).
+23:15:47 Processing monitor sample in service worker matcher.
+23:15:47 Monitor sample result: no match (IPL logo, match score 0.409).
+23:15:49 Processing monitor sample in service worker matcher.
+23:15:49 Monitor sample result: no match (IPL logo, match score 0.410).
+23:15:50 Processing monitor sample in service worker matcher.
+23:15:50 Monitor sample result: no match (IPL logo, match score 0.441).
+23:15:52 Processing monitor sample in service worker matcher.
+23:15:52 Monitor sample result: no match (IPL logo, match score 0.223).
+23:15:54 Processing monitor sample in service worker matcher.
+23:15:54 Monitor sample result: no match (IPL logo, match score 0.224).
+23:15:55 Processing monitor sample in service worker matcher.
+23:15:55 Monitor sample result: no match (IPL logo, match score 0.223).
+23:15:57 Processing monitor sample in service worker matcher.
+23:15:57 Monitor sample result: no match (IPL logo, match score 0.203).
+23:15:58 Processing monitor sample in service worker matcher.
+23:15:59 Monitor sample result: no match (IPL logo, match score 0.203).
+23:16:00 Processing monitor sample in service worker matcher.
+23:16:00 Monitor sample result: no match (IPL logo, match score 0.346).
+23:16:02 Processing monitor sample in service worker matcher.
+23:16:02 Monitor sample result: no match (IPL logo, match score 0.348).
+23:16:03 Processing monitor sample in service worker matcher.
+23:16:04 Monitor sample result: no match (IPL logo, match score 0.232).
+23:16:05 Processing monitor sample in service worker matcher.
+23:16:05 Monitor sample result: no match (IPL logo, match score 0.159).
+23:16:07 Processing monitor sample in service worker matcher.
+23:16:07 Monitor sample result: no match (IPL logo, match score 0.236).
+23:16:08 Processing monitor sample in service worker matcher.
+23:16:09 Monitor sample result: no match (IPL logo, match score 0.161).
+23:16:10 Processing monitor sample in service worker matcher.
+23:16:10 Monitor sample result: no match (IPL logo, match score 0.539).
+23:16:12 Processing monitor sample in service worker matcher.
+23:16:12 Monitor sample result: match (IPL logo, match score 0.639).
+23:16:13 Processing monitor sample in service worker matcher.
+23:16:13 Monitor sample result: no match (IPL logo, match score 0.332).
+23:16:15 Processing monitor sample in service worker matcher.
+23:16:15 Monitor sample result: no match (IPL logo, match score 0.257).
+23:16:17 Processing monitor sample in service worker matcher.
+23:16:17 Monitor sample result: no match (IPL logo, match score 0.247).
+23:16:18 Processing monitor sample in service worker matcher.
+23:16:18 Monitor sample result: no match (IPL logo, match score 0.308).
+23:16:20 Processing monitor sample in service worker matcher.
+23:16:20 Monitor sample result: no match (IPL logo, match score 0.327).
+23:16:21 Processing monitor sample in service worker matcher.
+23:16:22 Monitor sample result: no match (IPL logo, match score 0.262).
+23:16:23 Processing monitor sample in service worker matcher.
+23:16:23 Monitor sample result: no match (IPL logo, match score 0.273).
+23:16:25 Processing monitor sample in service worker matcher.
+23:16:25 Monitor sample result: no match (IPL logo, match score 0.293).
+23:16:26 Processing monitor sample in service worker matcher.
+23:16:26 Monitor sample result: no match (IPL logo, match score 0.380).
+23:16:28 Processing monitor sample in service worker matcher.
+23:16:28 Monitor sample result: no match (IPL logo, match score 0.215).
+23:16:29 Processing monitor sample in service worker matcher.
+23:16:29 Monitor sample result: no match (IPL logo, match score 0.316).
+23:16:31 Processing monitor sample in service worker matcher.
+23:16:31 Monitor sample result: no match (IPL logo, match score 0.308).
+23:16:32 Processing monitor sample in service worker matcher.
+23:16:33 Monitor sample result: no match (IPL logo, match score 0.307).
+23:16:34 Processing monitor sample in service worker matcher.
+23:16:34 Monitor sample result: no match (IPL logo, match score 0.261).
+23:16:35 Processing monitor sample in service worker matcher.
+23:16:36 Monitor sample result: no match (IPL logo, match score 0.261).
+23:16:37 Processing monitor sample in service worker matcher.
+23:16:37 Monitor sample result: no match (IPL logo, match score 0.254).
+23:16:38 Processing monitor sample in service worker matcher.
+23:16:38 Monitor sample result: no match (IPL logo, match score 0.257).
+23:16:40 Processing monitor sample in service worker matcher.
+23:16:40 Monitor sample result: no match (IPL logo, match score 0.261).
+23:16:41 Processing monitor sample in service worker matcher.
+23:16:41 Monitor sample result: no match (IPL logo, match score 0.267).
+23:16:43 Processing monitor sample in service worker matcher.
+23:16:43 Monitor sample result: no match (IPL logo, match score 0.216).
+23:16:44 Processing monitor sample in service worker matcher.
+23:16:44 Monitor sample result: no match (IPL logo, match score 0.373).
+23:16:46 Processing monitor sample in service worker matcher.
+23:16:46 Monitor sample result: no match (IPL logo, match score 0.438).
+23:16:47 Processing monitor sample in service worker matcher.
+23:16:48 Monitor sample result: no match (IPL logo, match score 0.438).
+23:16:49 Processing monitor sample in service worker matcher.
+23:16:49 Monitor sample result: no match (IPL logo, match score 0.434).
+23:16:51 Processing monitor sample in service worker matcher.
+23:16:51 Monitor sample result: match (IPL logo, match score 0.628).
+23:16:52 Processing monitor sample in service worker matcher.
+23:16:52 Monitor sample result: match (IPL logo, match score 0.656).
+23:16:54 Processing monitor sample in service worker matcher.
+23:16:54 Monitor sample result: no match (IPL logo, match score 0.355).
+23:16:55 Processing monitor sample in service worker matcher.
+23:16:55 Monitor sample result: no match (IPL logo, match score 0.306).
+23:16:57 Processing monitor sample in service worker matcher.
+23:16:57 Monitor sample result: no match (IPL logo, match score 0.306).
+23:16:58 Processing monitor sample in service worker matcher.
+23:16:59 Monitor sample result: no match (IPL logo, match score 0.371).
+23:16:59 Capture requested for team logo from tab 1501763719 (RR vs RCB Live video streaming | TATA IPL 2026).
+23:17:00 Screenshot captured from tab 1501763719 in window 1501763709.
+23:17:00 Sending screenshot to offscreen processor for team template build.
+23:17:00 Home team logo saved with 3 matching segments.
+23:17:00 Processing monitor sample in service worker matcher.
+23:17:00 Monitor sample result: match (Home team logo, match score 0.903).
+23:17:02 Processing monitor sample in service worker matcher.
+23:17:02 Monitor sample result: match (Home team logo, match score 0.701).
+23:17:03 Processing monitor sample in service worker matcher.
+23:17:03 Monitor sample result: no match (Home team logo, match score 0.541).
+23:17:05 Processing monitor sample in service worker matcher.
+23:17:05 Monitor sample result: no match (Home team logo, match score 0.467).
+23:17:06 Processing monitor sample in service worker matcher.
+23:17:06 Monitor sample result: no match (Home team logo, match score 0.299).
+23:17:08 Processing monitor sample in service worker matcher.
+23:17:08 Monitor sample result: no match (Home team logo, match score 0.275).
+23:17:09 Processing monitor sample in service worker matcher.
+23:17:09 Monitor sample result: match (IPL logo, match score 0.640).
+23:17:11 Processing monitor sample in service worker matcher.
+23:17:11 Monitor sample result: match (IPL logo, match score 0.630).
+23:17:12 Processing monitor sample in service worker matcher.
+23:17:12 Monitor sample result: match (IPL logo, match score 0.626).
+23:17:13 Processing monitor sample in service worker matcher.
+23:17:13 Monitor sample result: match (IPL logo, match score 0.630).
+23:17:15 Processing monitor sample in service worker matcher.
+23:17:15 Monitor sample result: no match (IPL logo, match score 0.554).
+23:17:16 Processing monitor sample in service worker matcher.
+23:17:16 Monitor sample result: no match (IPL logo, match score 0.572).
+23:17:18 Processing monitor sample in service worker matcher.
+23:17:18 Monitor sample result: match (IPL logo, match score 0.790).
+23:17:19 Processing monitor sample in service worker matcher.
+23:17:19 Monitor sample result: match (IPL logo, match score 0.789).
+23:17:21 Processing monitor sample in service worker matcher.
+23:17:21 Monitor sample result: match (IPL logo, match score 0.858).
+23:17:22 Processing monitor sample in service worker matcher.
+23:17:23 Monitor sample result: match (IPL logo, match score 0.891).
+23:17:24 Processing monitor sample in service worker matcher.
+23:17:24 Monitor sample result: no match (IPL logo, match score 0.244).
+23:17:26 Processing monitor sample in service worker matcher.
+23:17:26 Monitor sample result: no match (IPL logo, match score 0.254).
+23:17:27 Processing monitor sample in service worker matcher.
+23:17:27 Monitor sample result: no match (IPL logo, match score 0.445).
+23:17:29 Processing monitor sample in service worker matcher.
+23:17:29 Monitor sample result: no match (IPL logo, match score 0.444).
+23:17:30 Processing monitor sample in service worker matcher.
+23:17:30 Monitor sample result: no match (IPL logo, match score 0.589).
+23:17:32 Processing monitor sample in service worker matcher.
+23:17:32 Monitor sample result: match (IPL logo, match score 0.646).
+23:17:33 Processing monitor sample in service worker matcher.
+23:17:33 Monitor sample result: no match (IPL logo, match score 0.584).
+23:17:35 Processing monitor sample in service worker matcher.
+23:17:35 Monitor sample result: match (IPL logo, match score 0.686).
+23:17:36 Processing monitor sample in service worker matcher.
+23:17:36 Monitor sample result: match (IPL logo, match score 0.753).
+23:17:38 Processing monitor sample in service worker matcher.
+23:17:38 Monitor sample result: match (IPL logo, match score 0.870).
+23:17:39 Processing monitor sample in service worker matcher.
+23:17:39 Monitor sample result: match (IPL logo, match score 0.884).
+23:17:41 Processing monitor sample in service worker matcher.
+23:17:41 Monitor sample result: no match (IPL logo, match score 0.547).
+23:17:42 Processing monitor sample in service worker matcher.
+23:17:42 Monitor sample result: no match (Home team logo, match score 0.366).
+23:17:44 Processing monitor sample in service worker matcher.
+23:17:44 Monitor sample result: no match (IPL logo, match score 0.583).
+23:17:45 Processing monitor sample in service worker matcher.
+23:17:45 Monitor sample result: match (IPL logo, match score 0.621).
+23:17:47 Processing monitor sample in service worker matcher.
+23:17:47 Monitor sample result: match (IPL logo, match score 0.694).
+23:17:48 Processing monitor sample in service worker matcher.
+23:17:48 Monitor sample result: match (IPL logo, match score 0.869).
+23:17:50 Processing monitor sample in service worker matcher.
+23:17:50 Monitor sample result: match (IPL logo, match score 0.870).
+23:17:51 Processing monitor sample in service worker matcher.
+23:17:51 Monitor sample result: match (IPL logo, match score 0.679).
+23:17:53 Processing monitor sample in service worker matcher.
+23:17:53 Monitor sample result: no match (Home team logo, match score 0.317).
+23:17:55 Processing monitor sample in service worker matcher.
+23:17:55 Monitor sample result: no match (Home team logo, match score 0.303).
+23:17:57 Processing monitor sample in service worker matcher.
+23:17:57 Monitor sample result: no match (Home team logo, match score 0.256).
+23:17:58 Processing monitor sample in service worker matcher.
+23:17:58 Monitor sample result: no match (Home team logo, match score 0.283).
+23:18:00 Processing monitor sample in service worker matcher.
+23:18:00 Monitor sample result: no match (Home team logo, match score 0.291).
+23:18:01 Processing monitor sample in service worker matcher.
+23:18:01 Monitor sample result: no match (Home team logo, match score 0.259).
+23:18:03 Processing monitor sample in service worker matcher.
+23:18:03 Monitor sample result: no match (Home team logo, match score 0.276).
+23:18:04 Processing monitor sample in service worker matcher.
+23:18:05 Monitor sample result: match (Home team logo, match score 0.638).
+23:18:06 Processing monitor sample in service worker matcher.
+23:18:06 Monitor sample result: match (Home team logo, match score 0.638).
+23:18:08 Processing monitor sample in service worker matcher.
+23:18:08 Monitor sample result: no match (Home team logo, match score 0.554).
+23:18:09 Processing monitor sample in service worker matcher.
+23:18:09 Monitor sample result: no match (IPL logo, match score 0.559).
+23:18:11 Processing monitor sample in service worker matcher.
+23:18:11 Monitor sample result: no match (IPL logo, match score 0.560).
+23:18:12 Processing monitor sample in service worker matcher.
+23:18:12 Monitor sample result: no match (IPL logo, match score 0.549).
+23:18:14 Processing monitor sample in service worker matcher.
+23:18:14 Monitor sample result: match (IPL logo, match score 0.753).
+23:18:15 Processing monitor sample in service worker matcher.
+23:18:15 Monitor sample result: match (IPL logo, match score 0.744).
+23:18:17 Processing monitor sample in service worker matcher.
+23:18:17 Monitor sample result: match (IPL logo, match score 0.742).
+23:18:18 Processing monitor sample in service worker matcher.
+23:18:18 Monitor sample result: match (IPL logo, match score 0.745).
+23:18:20 Processing monitor sample in service worker matcher.
+23:18:20 Monitor sample result: no match (IPL logo, match score 0.564).
+23:18:22 Processing monitor sample in service worker matcher.
+23:18:22 Monitor sample result: no match (IPL logo, match score 0.562).
+23:18:23 Processing monitor sample in service worker matcher.
+23:18:23 Monitor sample result: no match (IPL logo, match score 0.323).
+23:18:25 Processing monitor sample in service worker matcher.
+23:18:25 Monitor sample result: no match (IPL logo, match score 0.300).
+23:18:26 Processing monitor sample in service worker matcher.
+23:18:27 Monitor sample result: no match (IPL logo, match score 0.307).
+23:18:28 Processing monitor sample in service worker matcher.
+23:18:28 Monitor sample result: no match (IPL logo, match score 0.295).
+23:18:30 Processing monitor sample in service worker matcher.
+23:18:30 Monitor sample result: no match (IPL logo, match score 0.306).
+23:18:31 Processing monitor sample in service worker matcher.
+23:18:32 Monitor sample result: no match (IPL logo, match score 0.303).
+23:18:33 Processing monitor sample in service worker matcher.
+23:18:33 Monitor sample result: no match (IPL logo, match score 0.303).
+23:18:35 Processing monitor sample in service worker matcher.
+23:18:35 Monitor sample result: no match (IPL logo, match score 0.299).
+23:18:36 Processing monitor sample in service worker matcher.
+23:18:36 Monitor sample result: no match (IPL logo, match score 0.305).
+23:18:38 Processing monitor sample in service worker matcher.
+23:18:38 Monitor sample result: no match (IPL logo, match score 0.304).
+23:18:39 Processing monitor sample in service worker matcher.
+23:18:40 Monitor sample result: no match (IPL logo, match score 0.299).
+23:18:41 Processing monitor sample in service worker matcher.
+23:18:41 Monitor sample result: no match (IPL logo, match score 0.310).
+23:18:43 Processing monitor sample in service worker matcher.
+23:18:43 Monitor sample result: no match (IPL logo, match score 0.295).
+23:18:44 Processing monitor sample in service worker matcher.
+23:18:44 Monitor sample result: no match (IPL logo, match score 0.470).
+23:18:46 Processing monitor sample in service worker matcher.
+23:18:46 Monitor sample result: no match (IPL logo, match score 0.407).
+23:18:47 Processing monitor sample in service worker matcher.
+23:18:48 Monitor sample result: no match (IPL logo, match score 0.364).
+23:18:49 Processing monitor sample in service worker matcher.
+23:18:49 Monitor sample result: no match (IPL logo, match score 0.372).
+23:18:51 Processing monitor sample in service worker matcher.
+23:18:51 Monitor sample result: no match (IPL logo, match score 0.450).
+23:18:52 Processing monitor sample in service worker matcher.
+23:18:53 Monitor sample result: no match (Home team logo, match score 0.355).
+23:18:54 Processing monitor sample in service worker matcher.
+23:18:54 Monitor sample result: no match (Home team logo, match score 0.343).
+23:18:56 Processing monitor sample in service worker matcher.
+23:18:56 Monitor sample result: match (Home team logo, match score 0.649).
+23:18:57 Processing monitor sample in service worker matcher.
+23:18:57 Monitor sample result: no match (Home team logo, match score 0.217).
+23:18:59 Processing monitor sample in service worker matcher.
+23:18:59 Monitor sample result: no match (Home team logo, match score 0.343).
+23:19:01 Processing monitor sample in service worker matcher.
+23:19:01 Monitor sample result: no match (Home team logo, match score 0.294).
+23:19:02 Processing monitor sample in service worker matcher.
+23:19:02 Monitor sample result: no match (Home team logo, match score 0.279).

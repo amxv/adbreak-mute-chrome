@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Adbreak Mute Debug</title>
+    <link rel="stylesheet" href="popup.css" />
+    <style>
+      body {
+        min-width: 720px;
+      }
+
+      .debug-page {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 18px;
+      }
+
+      .debug-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+
+      .debug-card {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(255, 250, 241, 0.88);
+      }
+
+      .debug-card h2 {
+        margin: 0 0 8px;
+        font-size: 14px;
+      }
+
+      .debug-card pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="debug-page">
+      <h1>Adbreak Mute Debug</h1>
+      <p class="intro">Live state and event log from extension storage.</p>
+      <div class="debug-grid">
+        <section class="debug-card">
+          <h2>Event Log</h2>
+          <pre id="debug-log">Loading…</pre>
+        </section>
+        <section class="debug-card">
+          <h2>Current State</h2>
+          <pre id="debug-state">Loading…</pre>
+        </section>
+      </div>
+    </main>
+    <script src="debug.js"></script>
+  </body>
+</html>
