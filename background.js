@@ -24,8 +24,9 @@ const SEGMENT_DEFS = [
 ];
 const MATCH_THRESHOLD = 0.52;
 const SOFT_MATCH_THRESHOLD = 0.4;
-const ABSENT_SAMPLES_TO_MUTE = 3;
+const ABSENT_SAMPLES_TO_MUTE = 4;
 const PRESENT_SAMPLES_TO_UNMUTE = 1;
+const LOGO_TRANSITION_GRACE_MS = 3500;
 const DEBUG_MIRROR_URL = "http://127.0.0.1:38241/log";
 
 const DEFAULT_STATE = {
@@ -46,6 +47,7 @@ const DEFAULT_STATE = {
     debugLog: [],
     consecutivePresent: 0,
     consecutiveAbsent: 0,
+    lastLogoSeenAt: null,
     autoMuted: false,
     muted: null,
     mutedReason: null,
@@ -92,6 +94,9 @@ function withDefaults(state = {}) {
       consecutiveAbsent: Number.isInteger(runtime.consecutiveAbsent) && runtime.consecutiveAbsent >= 0
         ? runtime.consecutiveAbsent
         : 0,
+      lastLogoSeenAt: Number.isFinite(Number(runtime.lastLogoSeenAt))
+        ? Number(runtime.lastLogoSeenAt)
+        : null,
       autoMuted: Boolean(runtime.autoMuted),
       muted: typeof runtime.muted === "boolean" ? runtime.muted : DEFAULT_STATE.runtime.muted,
       mutedReason:
@@ -586,6 +591,7 @@ async function stopMonitoring(state, reason) {
   next.runtime.matchScore = null;
   next.runtime.consecutivePresent = 0;
   next.runtime.consecutiveAbsent = 0;
+  next.runtime.lastLogoSeenAt = null;
   next.runtime.lastDecision = reason;
   next.runtime.statusMessage = reason;
 
@@ -622,6 +628,7 @@ async function buildPopupState(preloadedState = null) {
     debugLog: state.runtime.debugLog,
     consecutivePresent: state.runtime.consecutivePresent,
     consecutiveAbsent: state.runtime.consecutiveAbsent,
+    lastLogoSeenAt: state.runtime.lastLogoSeenAt,
   };
 }
 
@@ -785,6 +792,7 @@ async function runMonitorTick() {
       state.runtime.lastDecision = "Capture failed; mute state unchanged.";
       state.runtime.consecutivePresent = 0;
       state.runtime.consecutiveAbsent = 0;
+      state.runtime.lastLogoSeenAt = null;
       state = appendDebug(state, message);
       await setStoredState(state);
       await scheduleNextMonitorTick();
@@ -809,6 +817,7 @@ async function runMonitorTick() {
       state.runtime.lastDecision = "Frame processing failed; mute state unchanged.";
       state.runtime.consecutivePresent = 0;
       state.runtime.consecutiveAbsent = 0;
+      state.runtime.lastLogoSeenAt = null;
       state = appendDebug(state, message);
       await setStoredState(state);
       await scheduleNextMonitorTick();
@@ -826,6 +835,7 @@ async function runMonitorTick() {
       state.runtime.lastDecision = "Blank frame detected; mute state unchanged.";
       state.runtime.consecutivePresent = 0;
       state.runtime.consecutiveAbsent = 0;
+      state.runtime.lastLogoSeenAt = null;
       state = appendDebug(state, message);
       await setStoredState(state);
       await scheduleNextMonitorTick();
@@ -834,9 +844,17 @@ async function runMonitorTick() {
 
     state.runtime.lastError = null;
 
-    if (matchResult.logoPresent) {
+    const now = Date.now();
+    const withinTransitionGrace =
+      matchResult.likelyStaticLogoInk &&
+      Number.isFinite(state.runtime.lastLogoSeenAt) &&
+      now - state.runtime.lastLogoSeenAt <= LOGO_TRANSITION_GRACE_MS;
+    const logoEffectivelyPresent = matchResult.logoPresent || withinTransitionGrace;
+
+    if (logoEffectivelyPresent) {
       state.runtime.consecutivePresent += 1;
       state.runtime.consecutiveAbsent = 0;
+      state.runtime.lastLogoSeenAt = now;
 
       if (
         state.runtime.consecutivePresent >= PRESENT_SAMPLES_TO_UNMUTE &&
@@ -848,9 +866,13 @@ async function runMonitorTick() {
         state.runtime.autoMuted = false;
         state.runtime.muted = Boolean(updated.mutedInfo?.muted);
         state.runtime.mutedReason = updated.mutedInfo?.reason ?? null;
-        state.runtime.lastDecision = `${matchResult.matchLabel} detected consistently; tab auto-unmuted.`;
+        state.runtime.lastDecision = withinTransitionGrace
+          ? `${matchResult.matchLabel} transition grace detected; tab auto-unmuted.`
+          : `${matchResult.matchLabel} detected consistently; tab auto-unmuted.`;
       } else {
-        state.runtime.lastDecision = `${matchResult.matchLabel} detected (${state.runtime.consecutivePresent}/${PRESENT_SAMPLES_TO_UNMUTE}); tab kept unmuted.`;
+        state.runtime.lastDecision = withinTransitionGrace
+          ? `${matchResult.matchLabel} transition grace active; tab kept unmuted.`
+          : `${matchResult.matchLabel} detected (${state.runtime.consecutivePresent}/${PRESENT_SAMPLES_TO_UNMUTE}); tab kept unmuted.`;
       }
     } else {
       state.runtime.consecutiveAbsent += 1;
@@ -881,10 +903,12 @@ async function runMonitorTick() {
         : "ink unavailable";
     state.runtime.statusMessage = matchResult.logoPresent
       ? `${matchResult.matchLabel} found in top-left region; ${scoreText}; ${inkText}.`
-      : `No saved logo found in top-left region; ${scoreText}; ${inkText}.`;
+      : withinTransitionGrace
+        ? `${matchResult.matchLabel} transition grace active; ${scoreText}; ${inkText}.`
+        : `No saved logo found in top-left region; ${scoreText}; ${inkText}.`;
     state = appendDebug(
       state,
-      `Monitor sample result: ${matchResult.logoPresent ? "match" : "no match"} (${matchResult.matchLabel}, ${scoreText}, ${inkText}, static-ink ${matchResult.likelyStaticLogoInk ? "yes" : "no"}).`,
+      `Monitor sample result: ${logoEffectivelyPresent ? "present" : "absent"} (${matchResult.matchLabel}, ${scoreText}, ${inkText}, static-ink ${matchResult.likelyStaticLogoInk ? "yes" : "no"}, grace ${withinTransitionGrace ? "yes" : "no"}).`,
     );
 
     await setStoredState(state);
@@ -936,6 +960,7 @@ async function handleMessage(message) {
       state.runtime.matchScore = null;
       state.runtime.consecutivePresent = 0;
       state.runtime.consecutiveAbsent = 0;
+      state.runtime.lastLogoSeenAt = null;
       state.runtime.lastDecision = "Saved logos cleared.";
       state.runtime.statusMessage = "Capture the IPL logo again before monitoring.";
       state = appendDebug(state, "Saved templates cleared.");
@@ -973,6 +998,7 @@ async function handleMessage(message) {
       state.runtime.matchScore = null;
       state.runtime.consecutivePresent = 0;
       state.runtime.consecutiveAbsent = 0;
+      state.runtime.lastLogoSeenAt = null;
       state.runtime.lastDecision = "Monitoring started for current tab.";
       state.runtime.statusMessage = "Monitoring active. Waiting for the next sample.";
       state.runtime.autoMuted = false;
