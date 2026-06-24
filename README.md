@@ -44,3 +44,7 @@ Adbreak Mute is a Manifest V3 Chrome extension that monitors a selected tab and 
 - Screenshot sampling requires the monitored tab to be the active tab in its window.
 - Protected/DRM video may return blank frames; auto-detection will pause and surface an error.
 - Processing is fully local; screenshots are not uploaded.
+
+## License
+
+Apache 2.0
